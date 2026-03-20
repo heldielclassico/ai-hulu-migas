@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 
 # --- KONFIGURASI API & LOKASI ---
-OPENWEATHER_API_KEY = "MASUKKAN_API_KEY_OPENWEATHER_ANDA"
+OPENWEATHER_API_KEY = "5763dfff82611a8770bccfca6b1b75f0"
 # Contoh Koordinat: Hulu Mahakam, Kalimantan (Lokasi Tambang)
 LAT = "-0.5000" 
 LON = "115.0000"
