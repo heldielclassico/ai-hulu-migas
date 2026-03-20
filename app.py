@@ -1,4 +1,46 @@
-import streamlit as st
+/**
+ * KONFIGURASI SIVITA LOGISTIK
+ */
+const CONFIG = {
+  // Pastikan ini adalah URL dashboard Streamlit Anda yang sudah di-deploy
+  STREAMLIT_URL: "https://ai-hulu-migas-8qpvdw5dkwrqyh4hut8xcq.streamlit.app/",
+  SHEET_NAME: "Logistik_Hulu"
+};
+
+/**
+ * Membuat Menu di Google Sheets
+ */
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('🚀 SIVITA PANEL')
+      .addItem('Kirim Data ke Dashboard', 'bukaDashboardStreamlit')
+      .addToUi();
+}
+
+/**
+ * Membuka Dashboard dan Mengirim ID Spreadsheet
+ */
+function bukaDashboardStreamlit() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert("Error: Nama sheet harus '" + CONFIG.SHEET_NAME + "' agar data terbaca.");
+    return;
+  }
+
+  const ssId = ss.getId();
+  // Mengirim ID spreadsheet sebagai parameter URL
+  const finalUrl = CONFIG.STREAMLIT_URL + "?sheet_id=" + ssId;
+  
+  const html = `
+    <script>
+      window.open('${finalUrl}', '_blank');
+      google.script.host.close();
+    </script>
+  `;
+  const modal = HtmlService.createHtmlOutput(html).setHeight(10).setWidth(10);
+  SpreadsheetApp.getUi().showModalDialog(modal, "Menghubungkan ke AI Dashboard...");
+}import streamlit as st
 import pandas as pd
 import requests
 
