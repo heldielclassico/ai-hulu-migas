@@ -34,7 +34,7 @@ query_params = st.query_params
 sheet_id = query_params.get("sheet_id")
 
 if sheet_id:
-    url_csv = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+    url_csv = f"https://docs.google.com/spreadsheets/d/141fCBIbinmZHj3UAHXadkhbyArZnaf5x7sRRudVMvdE/gviz/tq?tqx=out:csv"
     
     try:
         # 1. Ambil data mentah
