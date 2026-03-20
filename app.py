@@ -10,7 +10,6 @@ LON = "115.0000"
 
 st.set_page_config(page_title="Sivita Smart-Logistics", layout="wide", page_icon="🚢")
 
-# --- FUNGSI CUACA ---
 def get_live_weather():
     url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={OPENWEATHER_API_KEY}&units=metric"
     try:
@@ -19,15 +18,15 @@ def get_live_weather():
     except:
         return "Clear"
 
-# --- LOGIKA ANALISIS AI ---
 def hitung_status_ai(stok, pakai, jarak, cuaca):
     multipliers = {'Rain': 1.6, 'Thunderstorm': 2.2, 'Drizzle': 1.3, 'Clouds': 1.1, 'Clear': 1.0, 'Mist': 1.4}
     f_cuaca = multipliers.get(cuaca, 1.0)
+    # Proteksi pembagi nol
+    if pakai <= 0: return 99
     waktu_tiba = jarak / (400 / f_cuaca)
     sisa_hari = (stok / pakai) - waktu_tiba
     return round(max(0, sisa_hari), 1)
 
-# --- UI DASHBOARD ---
 st.title("🚢 Sivita Smart-Logistics Dashboard")
 st.subheader("Monitoring Rantai Pasok Hulu Migas Real-time")
 
@@ -35,34 +34,33 @@ query_params = st.query_params
 sheet_id = query_params.get("sheet_id")
 
 if sheet_id:
-    url_csv = f"https://docs.google.com/spreadsheets/d/141fCBIbinmZHj3UAHXadkhbyArZnaf5x7sRRudVMvdE/gviz/tq?tqx=out:csv"
+    url_csv = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
     
     try:
-        # Perbaikan: Menggunakan requests untuk mengambil konten mentah dan membersihkan karakter tak terlihat
+        # 1. Ambil data mentah
         response = requests.get(url_csv)
         response.encoding = 'utf-8'
-        csv_data = response.text
+        raw_text = response.text
         
-        # Baca CSV dengan penghilangan spasi otomatis pada nama kolom (quotechar handle)
-        df = pd.read_csv(io.StringIO(csv_data), quotechar='"', skipinitialspace=True)
+        # 2. Baca CSV dengan penanganan tanda kutip ganda
+        df = pd.read_csv(io.StringIO(raw_text), quotechar='"', skipinitialspace=True)
         
-        # Bersihkan nama kolom dari spasi atau karakter aneh yang mungkin terbawa
-        df.columns = df.columns.str.strip()
+        # 3. Bersihkan nama kolom dari spasi atau karakter aneh
+        df.columns = df.columns.str.strip().str.replace('"', '')
 
-        # Cek apakah kolom yang dibutuhkan ada
-        required = ['Nama Barang', 'Stok Saat Ini', 'Pemakaian Harian', 'Jarak ke Gudang (KM)']
+        # Tentukan kolom yang wajib ada
+        cols_needed = ['Nama Barang', 'Stok Saat Ini', 'Pemakaian Harian', 'Jarak ke Gudang (KM)']
         
-        if all(col in df.columns for col in required):
+        if all(col in df.columns for col in cols_needed):
+            # 4. Paksa konversi ke angka (karena di gambar Anda data terbungkus kutip)
+            for col in ['Stok Saat Ini', 'Pemakaian Harian', 'Jarak ke Gudang (KM)']:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
             weather_now = get_live_weather()
-            st.info(f"☁️ **Cuaca Saat Ini:** {weather_now} | Data tersinkronisasi dari Google Sheets.")
+            st.info(f"☁️ **Cuaca Lokasi Saat Ini:** {weather_now} | Data Terhubung.")
 
-            # Pastikan kolom angka bertipe numerik (karena di gambar Anda angka terbungkus kutip)
-            df['Stok Saat Ini'] = pd.to_numeric(df['Stok Saat Ini'], errors='coerce')
-            df['Pemakaian Harian'] = pd.to_numeric(df['Pemakaian Harian'], errors='coerce')
-            df['Jarak ke Gudang (KM)'] = pd.to_numeric(df['Jarak ke Gudang (KM)'], errors='coerce')
-
-            # Analisis AI
-            df['Prediksi Sisa (Hari)'] = df.apply(lambda r: hitung_status_ai(
+            # 5. Hitung Prediksi
+            df['Sisa (Hari)'] = df.apply(lambda r: hitung_status_ai(
                 r['Stok Saat Ini'], r['Pemakaian Harian'], r['Jarak ke Gudang (KM)'], weather_now
             ), axis=1)
 
@@ -70,24 +68,29 @@ if sheet_id:
                 if hari <= 3: return "🔴 KRITIS"
                 if hari <= 7: return "🟡 WASPADA"
                 return "🟢 AMAN"
-            df['Status AI'] = df['Prediksi Sisa (Hari)'].apply(label_status)
+            df['Status AI'] = df['Sisa (Hari)'].apply(label_status)
 
-            # Metrics
+            # Metrics Summary
             c1, c2, c3 = st.columns(3)
             c1.metric("Total Material", f"{len(df)} Item")
-            c2.metric("Kritis", len(df[df['Status AI'] == "🔴 KRITIS"]))
-            c3.metric("Cuaca", weather_now)
+            c2.metric("Status Kritis", len(df[df['Status AI'] == "🔴 KRITIS"]))
+            c3.metric("Kondisi Cuaca", weather_now)
 
             st.divider()
-            st.dataframe(df[['Nama Barang', 'Stok Saat Ini', 'Pemakaian Harian', 'Jarak ke Gudang (KM)', 'Prediksi Sisa (Hari)', 'Status AI']], 
-                         use_container_width=True, hide_index=True)
+            
+            # Tampilkan Tabel
+            st.dataframe(
+                df[['Nama Barang', 'Stok Saat Ini', 'Pemakaian Harian', 'Jarak ke Gudang (KM)', 'Sisa (Hari)', 'Status AI']], 
+                use_container_width=True, 
+                hide_index=True
+            )
         else:
-            st.error(f"Kolom tidak cocok. Kolom yang terdeteksi: {list(df.columns)}")
-            st.write("Data mentah terdeteksi:", df.head())
+            st.error(f"Kolom tidak cocok! Kolom yang terbaca: {list(df.columns)}")
+            st.write("Cek apakah baris pertama di Google Sheets adalah Header.")
 
     except Exception as e:
-        st.error(f"Terjadi kesalahan saat memproses data: {e}")
+        st.error(f"Kesalahan sistem: {e}")
 else:
-    st.warning("Menunggu data... Silakan klik 'Kirim Data' dari Google Sheets Anda.")
+    st.warning("Menunggu data dari Google Sheets... Silakan klik menu '🚀 SIVITA PANEL'.")
 
 st.caption("Sivita AI v3.0")
