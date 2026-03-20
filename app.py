@@ -20,15 +20,14 @@ def get_live_weather():
 
 # --- LOGIKA PREDIKSI RESIKO AI ---
 def hitung_status_ai(stok, pakai, jarak, cuaca):
-    # Faktor penghambat logistik (Hulu Migas)
     multipliers = {
         'Rain': 1.6, 'Thunderstorm': 2.2, 'Drizzle': 1.3, 
         'Clouds': 1.1, 'Clear': 1.0, 'Mist': 1.4
     }
     f_cuaca = multipliers.get(cuaca, 1.0)
     
-    # Kecepatan distribusi terhambat medan & cuaca
     # Rumus: (Stok/Pakai) - (Jarak / Kecepatan Terkoreksi Cuaca)
+    # Asumsi kecepatan dasar logistik adalah 400 unit per hari
     waktu_tiba = jarak / (400 / f_cuaca)
     sisa_hari = (stok / pakai) - waktu_tiba
     return round(max(0, sisa_hari), 1)
@@ -37,13 +36,13 @@ def hitung_status_ai(stok, pakai, jarak, cuaca):
 st.title("🚢 Sivita Smart-Logistics Dashboard")
 st.subheader("Monitoring Rantai Pasok Hulu Migas Real-time")
 
-# Ambil sheet_id dari URL
-params = st.query_params
-sheet_id = params.get("sheet_id")
+# Ambil sheet_id dari URL secara dinamis
+query_params = st.query_params
+sheet_id = query_params.get("sheet_id")
 
 if sheet_id:
-    # URL CSV Google Sheets
-    url_csv = f"https://docs.google.com/spreadsheets/d/141fCBIbinmZHj3UAHXadkhbyArZnaf5x7sRRudVMvdE/gviz/tq?tqx=out:csv"
+    # Mengonversi ID agar bisa dibaca sebagai CSV
+    url_csv = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
     
     try:
         # 1. Baca Seluruh Data dari Sheets
@@ -51,9 +50,9 @@ if sheet_id:
         
         # 2. Ambil Cuaca Saat Ini
         weather_now = get_live_weather()
-        st.info(f"☁️ **Cuaca Lokasi Saat Ini:** {weather_now} | Data disinkronkan dari Google Sheets.")
+        st.info(f"☁️ **Cuaca Lokasi Saat Ini:** {weather_now} | Data disinkronkan otomatis.")
 
-        # 3. Proses Analisis untuk Semua Baris
+        # 3. Proses Analisis
         def proses_baris(row):
             return hitung_status_ai(
                 row['Stok Saat Ini'], 
@@ -72,20 +71,17 @@ if sheet_id:
         
         df['Status AI'] = df['Prediksi Sisa (Hari)'].apply(label_status)
 
-        # 5. Tampilkan Ringkasan Ringkas (Metrics)
-        total_item = len(df)
+        # 5. Tampilkan Metrics
         kritis = len(df[df['Status AI'] == "🔴 KRITIS"])
-        
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total Material Pantauan", f"{total_item} Item")
-        c2.metric("Status Kritis", f"{kritis} Item", delta="-Peringatan" if kritis > 0 else "Aman")
+        c1.metric("Total Material", f"{len(df)} Item")
+        c2.metric("Status Kritis", f"{kritis} Item", delta="-Bahaya" if kritis > 0 else "Aman", delta_color="inverse")
         c3.metric("Kondisi Cuaca", weather_now)
 
         st.divider()
 
         # 6. Tampilkan Tabel Utama
         st.subheader("📋 Laporan Analisis Stok & Distribusi")
-        # Styling tabel agar lebih menarik
         st.dataframe(
             df[['Nama Barang', 'Stok Saat Ini', 'Pemakaian Harian', 'Prediksi Sisa (Hari)', 'Status AI']], 
             use_container_width=True,
@@ -93,9 +89,8 @@ if sheet_id:
         )
 
     except Exception as e:
-        st.error(f"Gagal memuat data. Pastikan Google Sheets Anda diatur ke 'Anyone with the link' (Viewer).")
+        st.error(f"Gagal memuat data. Pastikan Google Sheets Anda diatur ke 'Anyone with the link can view'.")
 else:
     st.warning("Menunggu sinkronisasi... Silakan klik 'Kirim Data' dari Google Sheets Anda.")
 
-st.divider()
 st.caption("Sivita AI v3.0 - Integrated with OpenWeather & Google Cloud")
