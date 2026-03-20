@@ -2,72 +2,82 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# --- KONFIGURASI API ---
+# --- KONFIGURASI ---
 OPENWEATHER_API_KEY = "5763dfff82611a8770bccfca6b1b75f0"
-LAT = "-0.5000" 
+LAT = "-0.5000"  # Koordinat lokasi lapangan (Contoh: Kalimantan)
 LON = "115.0000"
 
-st.set_page_config(page_title="Sivita Upstream AI", layout="wide", page_icon="🛢️")
+st.set_page_config(page_title="Sivita Logistics AI", layout="wide", page_icon="🚢")
 
-# --- FUNGSI AMBIL CUACA ---
-def get_live_weather():
+# --- FUNGSI CUACA REAL-TIME ---
+def get_weather():
     url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={OPENWEATHER_API_KEY}&units=metric"
     try:
-        response = requests.get(url)
-        data = response.json()
+        res = requests.get(url).json()
         return {
-            "condition": data['weather'][0]['main'],
-            "temp": data['main']['temp'],
-            "desc": data['weather'][0]['description']
+            "main": res['weather'][0]['main'],
+            "temp": res['main']['temp'],
+            "desc": res['weather'][0]['description']
         }
     except:
-        return {"condition": "Clear", "temp": 28, "desc": "Offline Mode"}
+        return {"main": "Clear", "temp": 30, "desc": "Api Offline"}
 
-# --- LOGIKA PREDIKSI ---
-def hitung_resiko(stok, pakai, jarak, cuaca):
-    multipliers = {'Rain': 1.5, 'Thunderstorm': 2.0, 'Drizzle': 1.3, 'Clouds': 1.1, 'Clear': 1.0, 'Mist': 1.2}
+# --- LOGIKA PREDIKSI & RESIKO ---
+def hitung_ai_status(stok, pakai, jarak, cuaca):
+    # Faktor penghambat logistik berdasarkan cuaca
+    multipliers = {
+        'Rain': 1.6, 'Thunderstorm': 2.2, 'Drizzle': 1.3, 
+        'Clouds': 1.1, 'Clear': 1.0, 'Mist': 1.4
+    }
     f_cuaca = multipliers.get(cuaca, 1.0)
-    # Kecepatan distribusi terhambat cuaca
-    waktu_tempuh = jarak / (400 / f_cuaca) 
+    
+    # Estimasi waktu tiba logistik dari depo (Asumsi 400km/hari dalam kondisi ideal)
+    waktu_tempuh = jarak / (400 / f_cuaca)
+    
+    # Sisa hari stok bertahan dikurangi potensi keterlambatan pengiriman
     sisa_hari = (stok / pakai) - waktu_tempuh
     return round(max(0, sisa_hari), 1)
 
-# --- TANGKAP DATA URL ---
+# --- UI DASHBOARD ---
+st.title("🚢 Smart Logistics Dashboard")
+
+# Tangkap data dari Apps Script via URL
 params = st.query_params
-item_val = params.get("item", "Pilih Data di Sheets")
-stok_val = float(params.get("stok", 0))
-pakai_val = float(params.get("pakai", 1))
-jarak_val = float(params.get("jarak", 0))
+item_gs = params.get("item", "Menunggu Data...")
+stok_gs = float(params.get("stok", 0))
+pakai_gs = float(params.get("pakai", 1))
+jarak_gs = float(params.get("jarak", 0))
 
-# --- UI ---
-st.title("🚢 Sivita Smart-Logistics: Hulu Migas 2026")
-weather = get_live_weather()
+# Jalankan API Cuaca
+weather = get_weather()
 
-st.info(f"📍 **Lokasi Tambang:** {weather['condition']} ({weather['temp']}°C) - {weather['desc'].capitalize()}")
-
-st.divider()
-
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.subheader("📦 Detail Inventaris")
-    st.write(f"**Item:** {item_val}")
-    st.write(f"**Stok:** {stok_val} Unit")
-    st.write(f"**Pemakaian:** {pakai_val}/hari")
-    st.write(f"**Jarak Depo:** {jarak_val} KM")
-
-with col2:
-    sisa = hitung_resiko(stok_val, pakai_val, jarak_val, weather['condition'])
-    st.subheader("📊 Analisis Resiko AI")
-    
-    st.metric("Prediksi Sisa Hari", f"{sisa} Hari")
-    
-    if sisa <= 3:
-        st.error("🔴 STATUS: KRITIS - Segera kirim ulang logistik!")
-    elif sisa <= 7:
-        st.warning("🟡 STATUS: WASPADA - Siapkan perencanaan re-order.")
-    else:
-        st.success("🟢 STATUS: AMAN - Stok mencukupi operasional.")
+st.info(f"📍 **Kondisi Lapangan:** {weather['main']} ({weather['temp']}°C) | *{weather['desc'].capitalize()}*")
 
 st.divider()
-st.caption("Data disinkronkan secara otomatis dari Google Sheets melalui SIVITA PANEL.")
+
+if "item" in params:
+    sisa = hitung_ai_status(stok_gs, pakai_gs, jarak_gs, weather['main'])
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.subheader("📦 Detail Barang")
+        st.write(f"**Nama:** {item_gs}")
+        st.write(f"**Stok:** {stok_gs} Unit")
+        st.write(f"**Jarak Depo:** {jarak_gs} KM")
+
+    with col2:
+        st.subheader("📊 Analisis Resiko AI")
+        st.metric("Estimasi Stok Aman", f"{sisa} Hari")
+        
+        if sisa <= 3:
+            st.error(f"🔴 STATUS KRITIS: Stok {item_gs} harus segera dikirim karena faktor cuaca {weather['main']} menghambat jalur distribusi!")
+        elif sisa <= 7:
+            st.warning(f"🟡 STATUS WASPADA: Persiapkan pemesanan ulang.")
+        else:
+            st.success(f"🟢 STATUS AMAN: Operasional berjalan normal.")
+else:
+    st.warning("Silakan pilih data di Google Sheets lalu klik menu 'Kirim Baris Ini ke Dashboard'.")
+
+st.divider()
+st.caption("Sistem ini mengintegrasikan Google Sheets, OpenWeather API, dan Streamlit Cloud.")
